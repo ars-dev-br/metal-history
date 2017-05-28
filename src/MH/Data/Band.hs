@@ -1,8 +1,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-module HM.Data.Band
-  ( BandResult
+module MH.Data.Band
+  ( BandResult(..)
+  , Band(..)
+  , BandAlbum(..)
   ) where
 
 import Data.Aeson

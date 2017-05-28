@@ -2,8 +2,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-module HM.Data.Search
-  ( SearchResult
+module MH.Data.Search
+  ( SearchResult(..)
+  , SearchData(..)
+  , Band(..)
   ) where
 
 import Data.Aeson

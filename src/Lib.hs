@@ -1,53 +1,75 @@
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DuplicateRecordFields      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
 module Lib
     ( someFunc
     ) where
 
-import Control.Exception (throwIO)
-import Data.Aeson
-import Data.Text
-import Network.HTTP.Req
+import           Control.Exception (throwIO)
+import           Data.List
+import           Data.Maybe
+import           Data.Ord
+import qualified Data.Text as T
+import           Data.Time
+import           Network.HTTP.Req
 
-import qualified HM.Data.Album as A
-import qualified HM.Data.Band as B
-import qualified HM.Data.Search as S
+import qualified MH.Data.Album as A
+import qualified MH.Data.Band as B
+import qualified MH.Data.Search as S
+import           MH.Net
 
 instance MonadHttp IO where
   handleHttpException = throwIO
 
-getAlbum :: (MonadHttp m) => Text -> m A.AlbumResult
-getAlbum id = do
-  r <- request $ albumUrl id
-  return (responseBody r :: A.AlbumResult)
-    where
-      albumUrl :: Text -> Url 'Http
-      albumUrl = (http "em.wemakesites.net" /: "album" /:)
+apiKey :: T.Text
+apiKey = ""
 
-getBand :: (MonadHttp m) => Text -> m B.BandResult
-getBand id = do
-  r <- request $ bandUrl id
-  return (responseBody r :: B.BandResult)
-    where
-      bandUrl :: Text -> Url 'Http
-      bandUrl = (http "em.wemakesites.net" /: "band" /:)
+sortedAlbums :: [T.Text] -> IO [A.AlbumData]
+sortedAlbums names = do
+  searchResults <- mapM (search apiKey) names
+  bandResults <- mapM fromSearchToBand searchResults
+  albumResults <- mapM fromBandToAlbums bandResults
+  return $ sortAlbumResults (concat albumResults)
 
-search :: (MonadHttp m) => Text -> m S.SearchResult
-search keyword = do
-  r <- request $ searchUrl keyword
-  return (responseBody r :: S.SearchResult)
-    where
-      searchUrl :: Text -> Url 'Http
-      searchUrl = (http "em.wemakesites.net" /: "search" /: "band_name" /: )
+fromSearchToBand :: S.SearchResult -> IO B.BandResult
+fromSearchToBand searchResult =
+  let searchData = fromJust $ S.searchData searchResult
+      searchBand = head $ S.bands searchData in
+    getBand apiKey (S.id searchBand)
 
-apiKey :: Option scheme
-apiKey = "api_key" =: ("" :: Text)
+fromBandToAlbums :: B.BandResult -> IO [A.AlbumResult]
+fromBandToAlbums bandResult =
+  let bandData = fromJust $ B.bandData bandResult
+      discography = B.discography bandData
+      fullLength = filter (\a -> B.albumType a == "Full-length") discography in
+    mapM (getAlbum apiKey . albumId) fullLength
+  where
+    albumId :: B.BandAlbum -> T.Text
+    albumId = B.id
 
-request :: (MonadHttp m, FromJSON a) => Url scheme -> m (JsonResponse a)
-request url = req GET url NoReqBody jsonResponse apiKey
+sortAlbumResults :: [A.AlbumResult] -> [A.AlbumData]
+sortAlbumResults = sortBy compareAlbumData . map (fromJust . A.albumData)
+
+compareAlbumData :: A.AlbumData -> A.AlbumData -> Ordering
+compareAlbumData lhs rhs =
+  comparing (timeFromString . A.releaseDate . A.album) lhs rhs
+
+timeFromString :: T.Text -> Maybe UTCTime
+timeFromString s = listToMaybe . catMaybes $ ([st, nd, rd, th] <*> pure s)
+  where
+    st = parseTimeM True defaultTimeLocale "%B %est, %Y" . T.unpack
+    nd = parseTimeM True defaultTimeLocale "%B %end, %Y" . T.unpack
+    rd = parseTimeM True defaultTimeLocale "%B %erd, %Y" . T.unpack
+    th = parseTimeM True defaultTimeLocale "%B %eth, %Y" . T.unpack
 
 someFunc :: IO ()
 someFunc = do
-  r <- getBand "689"
-  print r
+  albums <- sortedAlbums [ "Judas Priest"
+                         , "Black Sabbath"
+                         , "Deep Purple"
+                         , "Thin Lizzy"
+                         , "Motorhead"
+                         ]
+  mapM_ (putStrLn . show) $
+    map (\a -> (A.name $ A.band a, A.title $ A.album a, A.releaseDate $ A.album a)) albums

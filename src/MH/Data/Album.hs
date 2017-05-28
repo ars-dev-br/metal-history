@@ -2,8 +2,11 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-module HM.Data.Album
-  ( AlbumResult
+module MH.Data.Album
+  ( AlbumResult(..)
+  , AlbumData(..)
+  , Band(..)
+  , Album(..)
   ) where
 
 import Data.Aeson
@@ -14,10 +17,10 @@ data AlbumResult = AlbumResult
   { status :: Text
   , code :: Int
   , message :: Text
-  , albumData :: Maybe AlbumResultData
+  , albumData :: Maybe AlbumData
   } deriving Show
 
-data AlbumResultData = AlbumResultData
+data AlbumData = AlbumData
   { band :: Band
   , album :: Album
   } deriving (Generic, Show)
@@ -41,7 +44,7 @@ instance FromJSON AlbumResult where
     <*> v .: "message"
     <*> v .: "data"
 
-instance FromJSON AlbumResultData
+instance FromJSON AlbumData
 
 instance FromJSON Band where
   parseJSON = withObject "Band" $ \v -> Band
